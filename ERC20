@@ -1,0 +1,134 @@
+pragma solidity ^0.5.0;
+
+library SafeMath {
+    function add(uint a, uint b) internal pure returns (uint c) {
+        c = a + b;
+        require(c >= a);
+    }
+    function sub(uint a, uint b) internal pure returns (uint c) {
+        require(b <= a);
+        c = a - b;
+    }
+    function mul(uint a, uint b) internal pure returns (uint c) {
+        c = a * b;
+        require(a == 0 || c / a == b);
+    }
+    function div(uint a, uint b) internal pure returns (uint c) {
+        require(b > 0);
+        c = a / b;
+    }
+}
+
+/**
+ * @title ERC20 interface
+ * @dev see https://github.com/ethereum/EIPs/issues/20
+ */
+interface IERC20 {
+    function totalSupply() external view returns (uint256);
+    function balanceOf(address who) external view returns (uint256);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function transfer(address to, uint256 value) external returns (bool);
+    function approve(address spender, uint256 value) external returns (bool);
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
+
+contract ApproveAndCallFallBack {
+    function receiveApproval(address from, uint256 tokens, address token, bytes memory data) public;
+}
+
+contract Owned {
+    address public owner;
+    address public newOwner;
+
+    event OwnershipTransferred(address indexed _from, address indexed _to);
+
+    constructor() public {
+        owner = msg.sender;
+    }
+
+    modifier onlyOwner {
+        require(msg.sender == owner);
+        _;
+    }
+
+    function transferOwnership(address _newOwner) public onlyOwner {
+        newOwner = _newOwner;
+    }
+    function acceptOwnership() public {
+        require(msg.sender == newOwner);
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
+        newOwner = address(0);
+    }
+}
+
+contract GDSDLT is IERC20, Owned {
+    using SafeMath for uint256;
+
+    string public symbol;
+    string public  name;
+    uint8 public decimals;
+    uint256 _totalSupply;
+
+    mapping(address => uint) balances;
+    mapping(address => mapping(address => uint)) allowed;
+
+    constructor() public {
+        symbol = "GDSDLT";
+        name = "GDS DLT Test";
+        decimals = 18;
+        _totalSupply = 1000000 * 10**uint256(decimals);
+        balances[owner] = _totalSupply;
+        emit Transfer(address(0), owner, _totalSupply);
+    }
+
+    function totalSupply() external view returns (uint256) {
+        return _totalSupply.sub(balances[address(0)]);
+    }
+
+    function balanceOf(address who) external view returns (uint256) {
+        return balances[who];
+    }
+
+    function transfer(address to, uint256 value) external returns (bool) {
+        balances[msg.sender] = balances[msg.sender].sub(value);
+        balances[to] = balances[to].add(value);
+        emit Transfer(msg.sender, to, value);
+        return true;
+    }
+
+    function approve(address spender, uint256 value) external returns (bool) {
+        allowed[msg.sender][spender] = value;
+        emit Approval(msg.sender, spender, value);
+        return true;
+    }
+
+    function transferFrom(address from, address to, uint256 value) external returns (bool) {
+        balances[from] = balances[from].sub(value);
+        allowed[from][msg.sender] = allowed[from][msg.sender].sub(value);
+        balances[to] = balances[to].add(value);
+        emit Transfer(from, to, value);
+        return true;
+    }
+
+    function allowance(address owner, address spender) external view returns (uint256) {
+        return allowed[owner][spender];
+    }
+
+    function approveAndCall(address spender, uint tokens, bytes memory data) public returns (bool success) {
+        allowed[msg.sender][spender] = tokens;
+        emit Approval(msg.sender, spender, tokens);
+        ApproveAndCallFallBack(spender).receiveApproval(msg.sender, tokens, address(this), data);
+        return true;
+    }
+
+    function () external payable {
+        revert();
+    }
+
+    function transferAnyERC20Token(address tokenAddress, uint256 value) public onlyOwner returns (bool success) {
+        return IERC20(tokenAddress).transfer(owner, value);
+    }
+}
